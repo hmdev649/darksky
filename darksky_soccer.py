@@ -27,14 +27,12 @@ def get_season_data(database, season):
         pandas dataframe with match stats'''
 
     conn = sqlite3.connect(database)
-    c = conn.cursor()
-    c.execute(f"""SELECT *
+    query = f"""SELECT *
                  FROM Matches
                  WHERE Season = {season}
                  AND Div in ('D1', 'E0')
-                 ;""")
-    df = pd.DataFrame(c.fetchall())
-    df.columns = [x[0] for x in c.description]
+                 ;"""
+    df = pd.read_sql(query, conn)
     return df
 
 def get_weather_data(date, password, lat='52.5200', long='13.4050'):
@@ -127,7 +125,6 @@ def calculate_aggregate_stats_sqlite(match_stats_df, database):
 
     conn = sqlite3.connect(database)
     match_stats_df.to_sql('temp_rain_stats', con=conn, if_exists='replace')
-    c = conn.cursor()
 
     agg_query = '''
     SELECT
@@ -169,12 +166,8 @@ def calculate_aggregate_stats_sqlite(match_stats_df, database):
 
        ORDER BY GF DESC'''
 
-    c.execute(agg_query)
 
-    df = pd.DataFrame(c.fetchall(),
-                      columns=[x[0] for x in c.description])
-
-    c.execute('''DROP TABLE temp_rain_stats''')
+    df = pd.read_sql(agg_query, conn)
 
     return df.to_dict(orient='records')
 
@@ -191,12 +184,13 @@ def insert_to_atlas(atlas_user, atlas_key, cluster_name, collection_name, team_s
     returns:
         None
     '''
-    client = pymongo.MongoClient(f'mongodb+srv://{atlas_user}:{atlas_key}@{cluster_name}.mongodb.net/test?retryWrites=true&w=majority')
+    url = f'mongodb+srv://{atlas_user}:{atlas_key}@{cluster_name}.mongodb.net/test?retryWrites=true&w=majority'
+    client = pymongo.MongoClient(url)
     db = client.test
     collection = db[collection_name]
 
     result = collection.insert_many(team_stats,
                                     ordered=False)
-
+    print(f'len(result.inserted_ids) records inserted')
     if return_ids:
         return result.inserted_ids
